@@ -1,14 +1,57 @@
 import { motion } from "framer-motion";
-import { Bot } from "lucide-react";
+import { Bot, FileText } from "lucide-react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import type { Message } from "../types";
+import type { Document, Message } from "../types";
 
 interface MessageBubbleProps {
 	message: Message;
+	documents?: Document[];
+	onSelectDocument?: (id: string) => void;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+/**
+ * Find all [filename] citations in a message body and resolve them
+ * against the list of currently-attached documents. Tolerates:
+ *   - case differences
+ *   - missing ".pdf" suffix
+ *   - either filename-with-suffix or just the stem
+ * Returns unique `Document`s in the order they first appear in the text.
+ */
+function resolveCitations(content: string, documents: Document[]): Document[] {
+	if (documents.length === 0) return [];
+
+	const matches = content.match(/\[([^\]\n]+?)\]/g);
+	if (!matches) return [];
+
+	const byKey = new Map<string, Document>();
+	for (const doc of documents) {
+		const lower = doc.filename.toLowerCase();
+		const stem = lower.replace(/\.pdf$/, "");
+		byKey.set(lower, doc);
+		byKey.set(stem, doc);
+	}
+
+	const seen = new Set<string>();
+	const result: Document[] = [];
+	for (const raw of matches) {
+		const inner = raw.slice(1, -1).trim().toLowerCase();
+		// Try both the exact match and the .pdf-stripped stem
+		const candidate =
+			byKey.get(inner) ?? byKey.get(inner.replace(/\.pdf$/, ""));
+		if (candidate && !seen.has(candidate.id)) {
+			seen.add(candidate.id);
+			result.push(candidate);
+		}
+	}
+	return result;
+}
+
+export function MessageBubble({
+	message,
+	documents = [],
+	onSelectDocument,
+}: MessageBubbleProps) {
 	if (message.role === "system") {
 		return (
 			<motion.div
@@ -40,6 +83,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 	}
 
 	// Assistant message
+	const citations = resolveCitations(message.content, documents);
 	return (
 		<motion.div
 			initial={{ opacity: 0, y: 8 }}
@@ -54,11 +98,28 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 				<div className="prose">
 					<Streamdown>{message.content}</Streamdown>
 				</div>
-				{message.sources_cited > 0 && (
-					<p className="mt-1.5 text-xs text-neutral-400">
-						{message.sources_cited} source
-						{message.sources_cited !== 1 ? "s" : ""} cited
-					</p>
+				{citations.length > 0 ? (
+					<div className="mt-2 flex flex-wrap gap-1.5">
+						{citations.map((doc) => (
+							<button
+								key={doc.id}
+								type="button"
+								onClick={() => onSelectDocument?.(doc.id)}
+								className="inline-flex max-w-[240px] items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-xs text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-100 hover:text-neutral-800"
+								title={`Open ${doc.filename} in the viewer`}
+							>
+								<FileText className="h-3 w-3 flex-shrink-0" />
+								<span className="truncate">{doc.filename}</span>
+							</button>
+						))}
+					</div>
+				) : (
+					message.sources_cited > 0 && (
+						<p className="mt-1.5 text-xs text-neutral-400">
+							{message.sources_cited} source
+							{message.sources_cited !== 1 ? "s" : ""} cited
+						</p>
+					)
 				)}
 			</div>
 		</motion.div>

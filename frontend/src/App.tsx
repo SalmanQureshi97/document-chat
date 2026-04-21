@@ -4,7 +4,7 @@ import { ChatWindow } from "./components/ChatWindow";
 import { DocumentViewer } from "./components/DocumentViewer";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { useConversations } from "./hooks/use-conversations";
-import { useDocument } from "./hooks/use-document";
+import { useDocuments } from "./hooks/use-documents";
 import { useMessages } from "./hooks/use-messages";
 
 export default function App() {
@@ -28,10 +28,13 @@ export default function App() {
 	} = useMessages(selectedId);
 
 	const {
-		document,
-		upload,
-		refresh: refreshDocument,
-	} = useDocument(selectedId);
+		documents,
+		selectedDocumentId,
+		uploading,
+		selectDocument,
+		uploadDocument,
+		deleteDocument,
+	} = useDocuments(selectedId);
 
 	const handleSend = useCallback(
 		async (content: string) => {
@@ -43,13 +46,20 @@ export default function App() {
 
 	const handleUpload = useCallback(
 		async (file: File) => {
-			const doc = await upload(file);
+			const doc = await uploadDocument(file);
 			if (doc) {
-				refreshDocument();
 				refreshConversations();
 			}
 		},
-		[upload, refreshDocument, refreshConversations],
+		[uploadDocument, refreshConversations],
+	);
+
+	const handleDeleteDocument = useCallback(
+		async (id: string) => {
+			await deleteDocument(id);
+			refreshConversations();
+		},
+		[deleteDocument, refreshConversations],
 	);
 
 	const handleCreate = useCallback(async () => {
@@ -74,13 +84,21 @@ export default function App() {
 					error={messagesError}
 					streaming={streaming}
 					streamingContent={streamingContent}
-					hasDocument={!!document}
+					documents={documents}
 					conversationId={selectedId}
 					onSend={handleSend}
 					onUpload={handleUpload}
+					onSelectDocument={selectDocument}
 				/>
 
-				<DocumentViewer document={document} />
+				<DocumentViewer
+					documents={documents}
+					selectedDocumentId={selectedDocumentId}
+					onSelectDocument={selectDocument}
+					onDeleteDocument={handleDeleteDocument}
+					onUploadDocument={uploadDocument}
+					uploading={uploading}
+				/>
 			</div>
 		</TooltipProvider>
 	);

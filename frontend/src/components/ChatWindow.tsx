@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { Message } from "../types";
+import type { Document, Message } from "../types";
 import { ChatInput } from "./ChatInput";
 import { EmptyState } from "./EmptyState";
 import { MessageBubble, StreamingBubble } from "./MessageBubble";
@@ -11,10 +11,11 @@ interface ChatWindowProps {
 	error: string | null;
 	streaming: boolean;
 	streamingContent: string;
-	hasDocument: boolean;
+	documents: Document[];
 	conversationId: string | null;
 	onSend: (content: string) => void;
 	onUpload: (file: File) => void;
+	onSelectDocument: (id: string) => void;
 }
 
 export function ChatWindow({
@@ -23,12 +24,15 @@ export function ChatWindow({
 	error,
 	streaming,
 	streamingContent,
-	hasDocument,
+	documents,
 	conversationId,
 	onSend,
 	onUpload,
+	onSelectDocument,
 }: ChatWindowProps) {
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const firstDocument = documents[0];
+	const hasDocument = documents.length > 0;
 
 	// Auto-scroll to bottom when new messages arrive or during streaming
 	const messagesLength = messages.length;
@@ -69,7 +73,9 @@ export function ChatWindow({
 					{hasDocument ? (
 						<div className="text-center">
 							<p className="text-sm text-neutral-500">
-								Document uploaded. Ask a question to get started.
+								{documents.length === 1 && firstDocument
+									? `${firstDocument.filename} ready. Ask a question to get started.`
+									: `${documents.length} documents loaded. Ask a question that spans any or all of them.`}
 							</p>
 						</div>
 					) : (
@@ -97,7 +103,12 @@ export function ChatWindow({
 			<div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4">
 				<div className="mx-auto max-w-2xl space-y-1">
 					{messages.map((message) => (
-						<MessageBubble key={message.id} message={message} />
+						<MessageBubble
+							key={message.id}
+							message={message}
+							documents={documents}
+							onSelectDocument={onSelectDocument}
+						/>
 					))}
 					{streaming && <StreamingBubble content={streamingContent} />}
 				</div>

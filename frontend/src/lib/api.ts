@@ -82,6 +82,16 @@ export async function uploadDocument(
 	return handleResponse<Document>(res);
 }
 
+export async function deleteDocument(documentId: string): Promise<void> {
+	const res = await fetch(`${BASE}/documents/${documentId}`, {
+		method: "DELETE",
+	});
+	if (!res.ok) {
+		const text = await res.text().catch(() => "Unknown error");
+		throw new Error(`API error ${res.status}: ${text}`);
+	}
+}
+
 export function getDocumentUrl(documentId: string): string {
 	return `${BASE}/documents/${documentId}/content`;
 }
