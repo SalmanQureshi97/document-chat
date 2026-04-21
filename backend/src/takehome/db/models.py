@@ -43,6 +43,14 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String)  # "user", "assistant", "system"
     content: Mapped[str] = mapped_column(Text)
     sources_cited: Mapped[int] = mapped_column(Integer, default=0)
+    # Confidence verdict from a separate "judge" LLM pass that evaluates
+    # whether the assistant's answer is grounded in the cited passages.
+    # Null means: not evaluated (user messages, errors, refusals, or judge
+    # call failed). See services/llm.judge_confidence.
+    confidence: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    confidence_reason: Mapped[str | None] = mapped_column(
+        String(300), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

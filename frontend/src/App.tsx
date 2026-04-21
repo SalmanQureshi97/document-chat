@@ -24,6 +24,7 @@ export default function App() {
 		error: messagesError,
 		streaming,
 		streamingContent,
+		judgingMessageIds,
 		send,
 	} = useMessages(selectedId);
 
@@ -32,6 +33,7 @@ export default function App() {
 		selectedDocumentId,
 		uploading,
 		selectDocument,
+		pendingJump,
 		uploadDocument,
 		deleteDocument,
 	} = useDocuments(selectedId);
@@ -86,6 +88,7 @@ export default function App() {
 					streamingContent={streamingContent}
 					documents={documents}
 					conversationId={selectedId}
+					judgingMessageIds={judgingMessageIds}
 					onSend={handleSend}
 					onUpload={handleUpload}
 					onSelectDocument={selectDocument}
@@ -100,6 +103,7 @@ export default function App() {
 						onDeleteDocument={handleDeleteDocument}
 						onUploadDocument={uploadDocument}
 						uploading={uploading}
+						pendingJump={pendingJump}
 					/>
 				)}
 			</div>

@@ -20,6 +20,7 @@ from takehome.services.llm import (
     chat_with_documents,
     count_sources_cited,
     generate_title,
+    judge_confidence,
 )
 
 logger = structlog.get_logger()
@@ -38,6 +39,11 @@ class MessageOut(BaseModel):
     role: str
     content: str
     sources_cited: int
+    # Grounding verdict from the judge pass (see services/llm.judge_confidence).
+    # Null when not applicable — user messages, refusals, no documents, or
+    # the judge call failed/was skipped. The frontend treats null as "no pill".
+    confidence: str | None = None
+    confidence_reason: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -74,17 +80,10 @@ async def list_messages(
     result = await session.execute(stmt)
     messages = list(result.scalars().all())
 
-    return [
-        MessageOut(
-            id=m.id,
-            conversation_id=m.conversation_id,
-            role=m.role,
-            content=m.content,
-            sources_cited=m.sources_cited,
-            created_at=m.created_at,
-        )
-        for m in messages
-    ]
+    # Use model_validate so every column on Message (including the newer
+    # confidence fields) flows through automatically — we had a bug here
+    # where hand-constructing MessageOut silently dropped new fields.
+    return [MessageOut.model_validate(m) for m in messages]
 
 
 @router.post("/api/conversations/{conversation_id}/messages")
@@ -198,7 +197,9 @@ async def send_message(
                         conversation_id=conversation_id,
                     )
 
-            # Send the final message event with the complete assistant message
+            # Send the final message event with the complete assistant
+            # message. Confidence starts null — the judge pass runs next and
+            # emits a separate "confidence" event when it's ready.
             message_data = json.dumps(
                 {
                     "type": "message",
@@ -208,11 +209,43 @@ async def send_message(
                         "role": assistant_message.role,
                         "content": assistant_message.content,
                         "sources_cited": assistant_message.sources_cited,
+                        "confidence": None,
+                        "confidence_reason": None,
                         "created_at": assistant_message.created_at.isoformat(),
                     },
                 }
             )
             yield f"data: {message_data}\n\n"
+
+            # Judge pass. Kept in the same request so the SSE connection
+            # stays open until we've emitted the verdict — saves the frontend
+            # from having to poll or reconnect. Failures are swallowed
+            # (judge_confidence returns None) so a bad judge call never
+            # blocks the primary answer from reaching the user.
+            verdict = await judge_confidence(
+                user_message=body.content,
+                answer=full_response,
+                documents=document_contexts,
+            )
+            if verdict is not None:
+                assistant_message.confidence = verdict.level
+                assistant_message.confidence_reason = verdict.reason
+                async with session_factory() as judge_session:
+                    db_msg = await judge_session.get(Message, assistant_message.id)
+                    if db_msg is not None:
+                        db_msg.confidence = verdict.level
+                        db_msg.confidence_reason = verdict.reason
+                        await judge_session.commit()
+
+                confidence_data = json.dumps(
+                    {
+                        "type": "confidence",
+                        "message_id": assistant_message.id,
+                        "level": verdict.level,
+                        "reason": verdict.reason,
+                    }
+                )
+                yield f"data: {confidence_data}\n\n"
 
             # Send the done signal
             done_data = json.dumps(

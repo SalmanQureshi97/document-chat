@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
-import type { Message } from "../types";
+import type { ConfidenceLevel, Message } from "../types";
 
 export function useMessages(conversationId: string | null) {
 	const [messages, setMessages] = useState<Message[]>([]);
@@ -8,6 +8,12 @@ export function useMessages(conversationId: string | null) {
 	const [error, setError] = useState<string | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [streamingContent, setStreamingContent] = useState("");
+	// IDs of assistant messages that have streamed in but haven't received
+	// a confidence verdict yet. Used by MessageBubble to show a "Verifying…"
+	// placeholder where the pill will land.
+	const [judgingMessageIds, setJudgingMessageIds] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const abortRef = useRef<AbortController | null>(null);
 
 	const refresh = useCallback(async () => {
@@ -88,6 +94,9 @@ export function useMessages(conversationId: string | null) {
 								content?: string;
 								delta?: string;
 								message?: Message;
+								message_id?: string;
+								level?: ConfidenceLevel;
+								reason?: string;
 							};
 
 							if (parsed.type === "delta" && parsed.delta) {
@@ -97,9 +106,52 @@ export function useMessages(conversationId: string | null) {
 								accumulated += parsed.content;
 								setStreamingContent(accumulated);
 							} else if (parsed.type === "message" && parsed.message) {
-								// Final message from server
-								setMessages((prev) => [...prev, parsed.message as Message]);
+								// Final message from server. Mark it as "judging"
+								// so MessageBubble shows a verifying skeleton until
+								// the confidence event arrives (or the stream ends
+								// without one, meaning the backend skipped judging).
+								const msg = parsed.message;
+								setMessages((prev) => [...prev, msg]);
+								setJudgingMessageIds((prev) => {
+									const next = new Set(prev);
+									next.add(msg.id);
+									return next;
+								});
 								accumulated = "";
+							} else if (
+								parsed.type === "confidence" &&
+								parsed.message_id &&
+								parsed.level
+							) {
+								// Judge verdict arrived. Patch the message in place
+								// and clear its pending flag.
+								const id = parsed.message_id;
+								const level = parsed.level;
+								const reason = parsed.reason ?? null;
+								setMessages((prev) =>
+									prev.map((m) =>
+										m.id === id
+											? { ...m, confidence: level, confidence_reason: reason }
+											: m,
+									),
+								);
+								setJudgingMessageIds((prev) => {
+									if (!prev.has(id)) return prev;
+									const next = new Set(prev);
+									next.delete(id);
+									return next;
+								});
+							} else if (parsed.type === "done" && parsed.message_id) {
+								// Stream closed. If we never got a confidence event
+								// (backend decided not to judge), clear the skeleton
+								// so the bubble stops showing "Verifying…".
+								const id = parsed.message_id;
+								setJudgingMessageIds((prev) => {
+									if (!prev.has(id)) return prev;
+									const next = new Set(prev);
+									next.delete(id);
+									return next;
+								});
 							} else if (parsed.content && !parsed.type) {
 								// Fallback: plain content field
 								accumulated += parsed.content;
@@ -145,6 +197,7 @@ export function useMessages(conversationId: string | null) {
 		error,
 		streaming,
 		streamingContent,
+		judgingMessageIds,
 		send,
 		refresh,
 	};

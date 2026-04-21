@@ -2,13 +2,32 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import type { Document } from "../types";
 
+/**
+ * A request to jump the viewer to a specific page of a specific document.
+ * `tick` is an always-increasing counter so repeat clicks on the same
+ * (documentId, page) still re-trigger the jump effect in DocumentViewer.
+ */
+export interface CitationJump {
+	documentId: string;
+	page: number;
+	tick: number;
+}
+
 export interface UseDocumentsResult {
 	documents: Document[];
 	selectedDocumentId: string | null;
 	selectedDocument: Document | null;
 	uploading: boolean;
 	error: string | null;
-	selectDocument: (id: string) => void;
+	/**
+	 * Select a document as the active tab in the viewer. If `page` is
+	 * provided, the viewer will also jump to that page (used by citation
+	 * chips in chat messages). Tab clicks omit `page` and preserve the
+	 * per-doc page position.
+	 */
+	selectDocument: (id: string, page?: number) => void;
+	/** The most recent citation-driven jump, or null. */
+	pendingJump: CitationJump | null;
 	uploadDocument: (file: File) => Promise<Document | null>;
 	deleteDocument: (id: string) => Promise<void>;
 	refresh: () => Promise<void>;
@@ -23,6 +42,8 @@ export function useDocuments(
 	);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [pendingJump, setPendingJump] = useState<CitationJump | null>(null);
+	const jumpTickRef = useRef(0);
 
 	// Serialize uploads so rapid multi-file picks don't race.
 	const uploadChainRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -61,8 +82,16 @@ export function useDocuments(
 		refresh();
 	}, [refresh]);
 
-	const selectDocument = useCallback((id: string) => {
+	const selectDocument = useCallback((id: string, page?: number) => {
 		setSelectedDocumentId(id);
+		if (typeof page === "number" && Number.isFinite(page) && page >= 1) {
+			jumpTickRef.current += 1;
+			setPendingJump({
+				documentId: id,
+				page: Math.floor(page),
+				tick: jumpTickRef.current,
+			});
+		}
 	}, []);
 
 	const uploadDocument = useCallback(
@@ -120,6 +149,7 @@ export function useDocuments(
 		uploading,
 		error,
 		selectDocument,
+		pendingJump,
 		uploadDocument,
 		deleteDocument,
 		refresh,
