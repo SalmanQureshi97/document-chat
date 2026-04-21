@@ -89,16 +89,19 @@ export default function App() {
 					onSend={handleSend}
 					onUpload={handleUpload}
 					onSelectDocument={selectDocument}
+					onCreate={handleCreate}
 				/>
 
-				<DocumentViewer
-					documents={documents}
-					selectedDocumentId={selectedDocumentId}
-					onSelectDocument={selectDocument}
-					onDeleteDocument={handleDeleteDocument}
-					onUploadDocument={uploadDocument}
-					uploading={uploading}
-				/>
+				{selectedId && (
+					<DocumentViewer
+						documents={documents}
+						selectedDocumentId={selectedDocumentId}
+						onSelectDocument={selectDocument}
+						onDeleteDocument={handleDeleteDocument}
+						onUploadDocument={uploadDocument}
+						uploading={uploading}
+					/>
+				)}
 			</div>
 		</TooltipProvider>
 	);
