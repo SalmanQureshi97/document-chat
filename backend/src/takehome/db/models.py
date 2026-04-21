@@ -55,7 +55,7 @@ class Document(Base):
         String, primary_key=True, default=lambda: uuid.uuid4().hex[:16]
     )
     conversation_id: Mapped[str] = mapped_column(
-        ForeignKey("conversations.id", ondelete="CASCADE")
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
     filename: Mapped[str] = mapped_column(String)
     file_path: Mapped[str] = mapped_column(String)
