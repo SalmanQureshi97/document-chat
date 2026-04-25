@@ -4,10 +4,6 @@ A document Q&A tool for commercial real estate lawyers. Upload legal documents (
 
 ---
 
-[Video Overview of the work down](https://www.loom.com/share/4fbd44b2d1684ad2adce0c011a55196d)
-
----
-
 ## Stack
 
 - **Frontend** — React (Vite + Tailwind + shadcn/Radix UI)
